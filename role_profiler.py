@@ -212,8 +212,8 @@ def build_role_profiles():
         if role_a not in role_profiles or role_b not in role_profiles:
             print(f"   ⚠️  Skipped (role missing): {role_a} vs {role_b}")
             continue
-        val_a = role_profiles[role_a]["ideal"].get(attr, 50)
-        val_b = role_profiles[role_b]["ideal"].get(attr_b, 50)
+        val_a = role_profiles[role_a]["ideal"].get(attr, 10)
+        val_b = role_profiles[role_b]["ideal"].get(attr_b, 10)
         passed = val_a > val_b if op == ">" else val_a < val_b
         icon = "✅" if passed else "❌"
         if not passed:

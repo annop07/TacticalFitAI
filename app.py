@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -13,13 +13,17 @@ st.caption("Developed by Annop & Teammate — Computer Science Year 3, KKU")
 st.markdown("---")
 
 # โหลดข้อมูล
-df = pd.read_csv("data/players_fm.csv", encoding="utf-8")
+try:
+    df = pd.read_csv("data/players_fm.csv", encoding="utf-8")
+except FileNotFoundError:
+    st.error("ไม่พบไฟล์ data/players_fm.csv — กรุณารัน fm_data_pipeline.py ก่อน")
+    st.stop()
 
-# Add optional columns if missing (backward compatibility)
+# Add optional columns if missing (FM 1-20 scale, midpoint = 10)
 optional_cols = ["Vision", "Aggression", "Composure", "OffTheBall"]
 for col in optional_cols:
     if col not in df.columns:
-        df[col] = 75
+        df[col] = 10.0
 
 # Filter เฉพาะ ST (Forward demo)
 df_st = df[df["Position"] == "ST"].copy()
@@ -107,7 +111,7 @@ if selected_players:
         ))
 
     fig_radar.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+        polar=dict(radialaxis=dict(visible=True, range=[0, 20])),
         showlegend=True,
         title=f"Radar Comparison ({system})"
     )

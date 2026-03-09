@@ -1,4 +1,20 @@
-data/FootballManager
+# Raw FM data (large, not redistributable)
+data/FootballManager/
+
+# Generated data files (reproducible via pipeline scripts)
 data/players_fm.csv
 data/role_profiles.json
 !data/.gitkeep
+
+# OS / editor noise
+.DS_Store
+**/.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Trained model binaries (large; regenerate via ml_role_classifier.py / price_prediction_model.py)
+models/*.pkl

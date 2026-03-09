@@ -16,9 +16,10 @@ import numpy as np
 import json
 import os
 import warnings
+from typing import Tuple
 warnings.filterwarnings("ignore")
 
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import KFold, cross_validate, train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
@@ -60,7 +61,7 @@ FEATURE_COLS = ATTR_COLS + ["Age"]
 # DATA
 # ─────────────────────────────────────────
 
-def load_data() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+def load_data() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     """โหลดและเตรียม features + target"""
     print(f"\n📥 Loading {PLAYERS_CSV} ...")
     df = pd.read_csv(PLAYERS_CSV)

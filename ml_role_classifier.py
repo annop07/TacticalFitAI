@@ -22,6 +22,7 @@ import numpy as np
 import json
 import os
 import warnings
+from typing import Tuple
 warnings.filterwarnings("ignore")
 
 from sklearn.ensemble import RandomForestClassifier
@@ -72,7 +73,7 @@ MIN_SAMPLES = 30
 # HELPERS
 # ─────────────────────────────────────────
 
-def load_data() -> tuple[pd.DataFrame, np.ndarray, np.ndarray, LabelEncoder]:
+def load_data() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, LabelEncoder]:
     """โหลดและเตรียม X, y สำหรับ classification"""
     print(f"\n📥 Loading {PLAYERS_CSV} ...")
     df = pd.read_csv(PLAYERS_CSV)
@@ -294,7 +295,6 @@ def main():
             learning_rate=0.1,
             subsample=0.8,
             colsample_bytree=0.8,
-            use_label_encoder=False,
             eval_metric="mlogloss",
             random_state=42,
             n_jobs=-1,

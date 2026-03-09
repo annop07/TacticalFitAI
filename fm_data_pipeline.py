@@ -8,14 +8,13 @@ Steps:
   2. Parse Position → standard label
   3. Filter top leagues
   4. Parse Transfer Value → float (€M)
-  5. Rescale FM attributes 1–20 → 0–100
+  5. Keep FM attributes in original 1–20 scale (no rescaling)
   6. Map FM attribute names → TacticalFitAI names
   7. Save → data/players_fm.csv
 """
 
 import pandas as pd
 import numpy as np
-import json
 import os
 
 # ─────────────────────────────────────────
@@ -172,7 +171,7 @@ def parse_transfer_value(val_str: str) -> float:
             else:
                 try:
                     vals.append(float(p))
-                except:
+                except (ValueError, TypeError):
                     pass
         if vals:
             return round(sum(vals) / len(vals), 2)
@@ -182,17 +181,17 @@ def parse_transfer_value(val_str: str) -> float:
     if "M" in s:
         try:
             return round(float(s.replace("M", "")), 2)
-        except:
+        except (ValueError, TypeError):
             return 0.0
     if "K" in s:
         try:
             return round(float(s.replace("K", "")) / 1000, 2)
-        except:
+        except (ValueError, TypeError):
             return 0.0
 
     try:
         return round(float(s) / 1_000_000, 2)
-    except:
+    except (ValueError, TypeError):
         return 0.0
 
 

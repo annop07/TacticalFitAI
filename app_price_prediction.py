@@ -1,6 +1,6 @@
 """
-TacticalFitAI - Advanced Analytics: Price Prediction
-ระบบทำนายราคาตลาดของนักเตะด้วย Machine Learning
+TacticalFitAI - Price Prediction (FM2023 Edition)
+ระบบทำนายราคาตลาดของนักเตะด้วย Machine Learning (Ridge Regression + FM attributes)
 """
 
 import streamlit as st
@@ -8,411 +8,329 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import mean_absolute_error, r2_score
 
-# Import modules
-from transfermarkt_scraper import add_market_values_to_dataframe
-from price_prediction_model import PlayerPricePredictor, estimate_prices_simple
-
-# ตั้งค่าหน้าเว็บ
+# ──────────────────────────────────────────────
+# Page Config
+# ──────────────────────────────────────────────
 st.set_page_config(
-    page_title="TacticalFitAI - Price Prediction",
+    page_title="TacticalFitAI – Price Prediction",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #555;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: #1f77b4;
-        color: white;
-        border-radius: 8px;
-        padding: 0.5rem;
-    }
+    .main-header { font-size:2.2rem; font-weight:bold; color:#1f77b4; text-align:center; margin-bottom:0.5rem; }
+    .sub-header  { font-size:1.1rem; color:#666; text-align:center; margin-bottom:1.5rem; }
 </style>
 """, unsafe_allow_html=True)
 
-# Header
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
+col_h1, col_h2, col_h3 = st.columns([1, 2, 1])
+with col_h2:
     st.markdown('<div class="main-header">⚽ TacticalFitAI</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">💰 Advanced Analytics: Price Prediction</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">💰 Price Prediction — FM2023 Edition</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
+# ──────────────────────────────────────────────
 # Sidebar
+# ──────────────────────────────────────────────
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/en/7/7a/Manchester_United_FC_crest.svg", width=100)
     st.title("🎯 Settings")
-
     analysis_mode = st.radio(
         "Select Analysis Mode:",
         ["💸 Price Prediction", "📊 Market Analysis", "🔍 Player Comparison"]
     )
-
     st.markdown("---")
     st.markdown("**📈 Model Info**")
-    st.info("Using Random Forest ML Model\n\nFeatures: 11 player attributes\n\nAccuracy: ~85% MAE")
-
+    st.info(
+        "**Ridge Regression** (L2 regularised)\n\n"
+        "Features: 15 FM attributes (1–20 scale)\n\n"
+        "Dataset: FM2023 — 22K+ players"
+    )
     st.markdown("---")
-    st.caption("Developed by Annop & Teammate\nComputer Science Year 3, KKU")
+    st.caption("TacticalFitAI • FM2023 Data • Streamlit Demo")
 
-# โหลดข้อมูล
-@st.cache_data
-def load_data():
-    df = pd.read_csv("data/players.csv", encoding="utf-8")
+# ──────────────────────────────────────────────
+# FM Attribute columns used as features
+# ──────────────────────────────────────────────
+FEATURE_COLS = [
+    "Finishing", "Positioning", "Speed", "Strength", "Passing", "Vision",
+    "Aggression", "Composure", "OffTheBall", "WorkRate", "Tackling",
+    "Marking", "Heading", "Dribbling", "Technique"
+]
 
-    # Add optional columns if missing
-    optional_cols = ["Vision", "Aggression", "Composure", "OffTheBall"]
-    for col in optional_cols:
+# ──────────────────────────────────────────────
+# Load data + Train model (cached)
+# ──────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def load_and_predict():
+    """Load FM dataset and train Ridge regression to predict MarketValue."""
+    paths = ["data/players_fm.csv", "players_fm.csv"]
+    df = None
+    for p in paths:
+        try:
+            df = pd.read_csv(p, encoding="utf-8")
+            break
+        except FileNotFoundError:
+            continue
+    if df is None:
+        return None, None, None, None
+
+    # Ensure feature columns exist and are numeric
+    for col in FEATURE_COLS:
         if col not in df.columns:
-            df[col] = 75
+            df[col] = 10.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(10.0).clip(1, 20)
 
-    # Add market values from Transfermarkt reference
-    df = add_market_values_to_dataframe(df)
+    # MarketValue in €M
+    if "MarketValue" not in df.columns:
+        df["MarketValue"] = 5.0
+    df["MarketValue"] = pd.to_numeric(df["MarketValue"], errors="coerce").fillna(0.5).clip(lower=0.05)
 
-    # Predict prices using ML model
-    df = estimate_prices_simple(df)
+    # Drop rows without valid MarketValue
+    df_model = df[df["MarketValue"] > 0.09].copy()
 
-    # Calculate price difference
-    df['PriceDiff'] = df['PredictedPrice'] - df['MarketValue']
-    df['PriceDiff_M'] = (df['PriceDiff'] / 1_000_000).round(1)
-    df['PriceDiff_Pct'] = ((df['PriceDiff'] / df['MarketValue']) * 100).round(1)
+    # Train Ridge regression (log target for better fit)
+    X = df_model[FEATURE_COLS].values
+    y = np.log1p(df_model["MarketValue"].values)  # log-scale for right-skewed distribution
 
-    # Value Rating (Undervalued/Overvalued)
-    def get_value_status(diff_pct):
-        if diff_pct > 20:
-            return "🔥 Undervalued"
-        elif diff_pct < -20:
-            return "⚠️ Overvalued"
-        else:
-            return "✅ Fair Value"
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
-    df['ValueStatus'] = df['PriceDiff_Pct'].apply(get_value_status)
+    model = Ridge(alpha=1.0)
+    model.fit(X_scaled, y)
 
-    return df
+    # CV score
+    cv_scores = cross_val_score(model, X_scaled, y, cv=5, scoring="r2")
 
-df = load_data()
+    # Predict on full dataset
+    X_all_scaled = scaler.transform(df[FEATURE_COLS].values)
+    df["PredictedValue"] = np.expm1(model.predict(X_all_scaled)).round(2)
+    df["PredictedValue"] = df["PredictedValue"].clip(lower=0.1)
 
-# ==================== MODE 1: PRICE PREDICTION ====================
+    df["PriceDiff_M"]   = (df["PredictedValue"] - df["MarketValue"]).round(2)
+    df["PriceDiff_Pct"] = ((df["PriceDiff_M"] / df["MarketValue"]) * 100).round(1)
+
+    def value_status(pct):
+        if pct > 25:   return "🔥 Undervalued"
+        elif pct < -25: return "⚠️ Overvalued"
+        else:           return "✅ Fair Value"
+
+    df["ValueStatus"] = df["PriceDiff_Pct"].apply(value_status)
+
+    # Model report
+    y_pred_train = np.expm1(model.predict(X_scaled))
+    y_true_train = df_model["MarketValue"].values
+    report = {
+        "cv_r2_mean": float(cv_scores.mean()),
+        "cv_r2_std":  float(cv_scores.std()),
+        "mae":        float(mean_absolute_error(y_true_train, y_pred_train)),
+        "r2":         float(r2_score(y_true_train, y_pred_train)),
+        "coefs":      dict(zip(FEATURE_COLS, model.coef_.tolist()))
+    }
+
+    return df, model, scaler, report
+
+# ──────────────────────────────────────────────
+# Load
+# ──────────────────────────────────────────────
+df, model, scaler, report = load_and_predict()
+
+if df is None:
+    st.error("⚠️ ไม่พบ `data/players_fm.csv` — กรุณารัน `fm_data_pipeline.py` ก่อน")
+    st.stop()
+
+# ──────────────────────────────────────────────
+# MODE 1: PRICE PREDICTION
+# ──────────────────────────────────────────────
 if analysis_mode == "💸 Price Prediction":
     st.subheader("💰 Player Market Value Predictions")
 
-    # Top metrics
-    col1, col2, col3, col4 = st.columns(4)
+    # Model info banner
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📦 Total Players",  f"{len(df):,}")
+    c2.metric("🤖 CV R²",          f"{report['cv_r2_mean']:.3f} ± {report['cv_r2_std']:.3f}")
+    c3.metric("📉 MAE (Train)",    f"€{report['mae']:.1f}M")
+    c4.metric("🔥 Undervalued",    f"{len(df[df['ValueStatus']=='🔥 Undervalued']):,}")
 
-    with col1:
-        avg_market = df['MarketValue_M'].mean()
-        st.metric("📊 Avg Market Value", f"€{avg_market:.1f}M")
-
-    with col2:
-        avg_predicted = df['PredictedPrice_M'].mean()
-        st.metric("🤖 Avg Predicted", f"€{avg_predicted:.1f}M")
-
-    with col3:
-        undervalued = len(df[df['PriceDiff_Pct'] > 20])
-        st.metric("🔥 Undervalued", f"{undervalued} players")
-
-    with col4:
-        overvalued = len(df[df['PriceDiff_Pct'] < -20])
-        st.metric("⚠️ Overvalued", f"{overvalued} players")
-
+    st.caption(
+        "⚠️ R² บน log-scale — MAE คำนวณบน training set (ไม่แยก test set) "
+        "เพราะเป้าหมาย demo คือ ranking ที่สมเหตุสมผล ไม่ใช่ production predictor"
+    )
     st.markdown("---")
 
-    # Filter options
-    col1, col2 = st.columns([1, 1])
+    # Filters
+    col1, col2, col3 = st.columns(3)
     with col1:
-        price_range = st.slider(
-            "💵 Filter by Market Value (€M):",
-            0, int(df['MarketValue_M'].max()),
-            (0, int(df['MarketValue_M'].max()))
-        )
-
+        mv_max = float(df["MarketValue"].max())
+        price_range = st.slider("Filter by Market Value (€M):", 0.0, min(mv_max, 200.0), (0.0, 50.0), 0.5)
     with col2:
         value_filter = st.multiselect(
-            "🎯 Filter by Value Status:",
+            "Filter by Value Status:",
             ["🔥 Undervalued", "✅ Fair Value", "⚠️ Overvalued"],
             default=["🔥 Undervalued", "✅ Fair Value", "⚠️ Overvalued"]
         )
+    with col3:
+        pos_filter = st.multiselect("Filter by Position:", sorted(df["Position"].dropna().unique()), default=[])
 
-    # Apply filters
-    df_filtered = df[
-        (df['MarketValue_M'] >= price_range[0]) &
-        (df['MarketValue_M'] <= price_range[1]) &
-        (df['ValueStatus'].isin(value_filter))
+    df_f = df[
+        (df["MarketValue"] >= price_range[0]) &
+        (df["MarketValue"] <= price_range[1]) &
+        (df["ValueStatus"].isin(value_filter))
     ].copy()
+    if pos_filter:
+        df_f = df_f[df_f["Position"].isin(pos_filter)]
 
-    # Display table
-    st.subheader(f"📋 Price Predictions ({len(df_filtered)} players)")
+    # Table
+    st.subheader(f"📋 Price Predictions ({len(df_f):,} players)")
+    display_cols = ["Player", "Position", "Club", "MarketValue", "PredictedValue", "PriceDiff_M", "PriceDiff_Pct", "ValueStatus"]
+    available = [c for c in display_cols if c in df_f.columns]
+    df_display = df_f[available].sort_values("PriceDiff_Pct", ascending=False).head(30).copy()
+    df_display = df_display.rename(columns={
+        "MarketValue":   "Market (€M)",
+        "PredictedValue":"Predicted (€M)",
+        "PriceDiff_M":   "Diff (€M)",
+        "PriceDiff_Pct": "Diff (%)",
+        "ValueStatus":   "Status"
+    })
+    st.dataframe(df_display.reset_index(drop=True), use_container_width=True, height=400)
 
-    display_columns = [
-        'Player', 'MarketValue_M', 'PredictedPrice_M',
-        'PriceDiff_M', 'PriceDiff_Pct', 'ValueStatus'
-    ]
-
-    df_display = df_filtered[display_columns].sort_values('PriceDiff_Pct', ascending=False)
-
-    # Rename columns for display
-    df_display.columns = [
-        'Player', 'Market Value (€M)', 'Predicted (€M)',
-        'Difference (€M)', 'Diff (%)', 'Status'
-    ]
-
-    st.dataframe(
-        df_display.head(20).style.background_gradient(
-            subset=['Diff (%)'],
-            cmap='RdYlGn'
-        ),
-        use_container_width=True,
-        height=400
-    )
-
-    # Visualization: Price Comparison Chart
+    # Chart: top 15 by MarketValue
     st.markdown("---")
-    st.subheader("📊 Market Value vs Predicted Price (Top 15)")
-
-    df_top15 = df_filtered.sort_values('MarketValue', ascending=False).head(15)
-
+    st.subheader("📊 Market Value vs Predicted Price (Top 15 by Market Value)")
+    df_top15 = df_f.sort_values("MarketValue", ascending=False).head(15)
     fig = go.Figure()
-
-    fig.add_trace(go.Bar(
-        name='Market Value',
-        x=df_top15['Player'],
-        y=df_top15['MarketValue_M'],
-        marker_color='lightblue'
-    ))
-
-    fig.add_trace(go.Bar(
-        name='Predicted Price',
-        x=df_top15['Player'],
-        y=df_top15['PredictedPrice_M'],
-        marker_color='orange'
-    ))
-
-    fig.update_layout(
-        barmode='group',
-        xaxis_tickangle=-45,
-        height=500,
-        title="Market Value vs ML Prediction",
-        xaxis_title="Player",
-        yaxis_title="Price (€M)"
-    )
-
+    fig.add_trace(go.Bar(name="Market Value", x=df_top15["Player"], y=df_top15["MarketValue"], marker_color="#4C9BE8"))
+    fig.add_trace(go.Bar(name="Predicted",    x=df_top15["Player"], y=df_top15["PredictedValue"], marker_color="#F4A261"))
+    fig.update_layout(barmode="group", xaxis_tickangle=-40, height=460,
+                      yaxis_title="€M", title="Market Value vs ML Prediction")
     st.plotly_chart(fig, use_container_width=True)
 
-# ==================== MODE 2: MARKET ANALYSIS ====================
+    # Feature importance
+    st.markdown("---")
+    st.subheader("🔬 Feature Importance (Ridge Coefficients)")
+    coef_df = pd.DataFrame({"Attribute": list(report["coefs"].keys()),
+                             "Coefficient": list(report["coefs"].values())})
+    coef_df = coef_df.sort_values("Coefficient", ascending=False)
+    fig_coef = px.bar(coef_df, x="Coefficient", y="Attribute", orientation="h",
+                      color="Coefficient", color_continuous_scale="RdBu",
+                      title="Attribute Importance for Price Prediction")
+    fig_coef.update_layout(yaxis=dict(autorange="reversed"), height=450)
+    st.plotly_chart(fig_coef, use_container_width=True)
+
+# ──────────────────────────────────────────────
+# MODE 2: MARKET ANALYSIS
+# ──────────────────────────────────────────────
 elif analysis_mode == "📊 Market Analysis":
     st.subheader("📈 Market Analysis Dashboard")
 
-    # Scatter plot: Stats vs Price
-    st.markdown("### 🎯 Player Performance vs Market Value")
-
+    st.markdown("### 🎯 Attribute vs Market Value")
     col1, col2 = st.columns(2)
-
     with col1:
-        x_axis = st.selectbox(
-            "Select X-axis:",
-            ['Finishing', 'Positioning', 'Speed', 'Strength', 'Passing', 'xG']
-        )
-
+        x_axis = st.selectbox("X-axis:", FEATURE_COLS, index=0)
     with col2:
-        y_axis = st.selectbox(
-            "Select Y-axis:",
-            ['MarketValue_M', 'PredictedPrice_M'],
-            index=0
-        )
+        y_axis = st.selectbox("Y-axis:", ["MarketValue", "PredictedValue"], index=0)
 
-    fig_scatter = px.scatter(
-        df,
-        x=x_axis,
-        y=y_axis,
-        size='MarketValue_M',
-        color='ValueStatus',
-        hover_name='Player',
-        hover_data={
-            'MarketValue_M': ':.1f',
-            'PredictedPrice_M': ':.1f',
-            'PriceDiff_Pct': ':.1f'
-        },
-        title=f"{x_axis} vs {y_axis}",
-        height=500,
+    fig_sc = px.scatter(
+        df.sample(min(3000, len(df)), random_state=42),
+        x=x_axis, y=y_axis, color="ValueStatus",
+        hover_name="Player", size="MarketValue",
+        size_max=20,
         color_discrete_map={
-            "🔥 Undervalued": "green",
-            "✅ Fair Value": "blue",
-            "⚠️ Overvalued": "red"
-        }
+            "🔥 Undervalued": "#2ecc71",
+            "✅ Fair Value": "#3498db",
+            "⚠️ Overvalued": "#e74c3c"
+        },
+        title=f"{x_axis} vs {y_axis} (FM 1–20 scale)",
+        labels={y_axis: f"{y_axis} (€M)"},
+        height=500
     )
+    st.plotly_chart(fig_sc, use_container_width=True)
 
-    st.plotly_chart(fig_scatter, use_container_width=True)
-
-    # Distribution analysis
     st.markdown("---")
-    st.markdown("### 📊 Price Distribution Analysis")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig_hist1 = px.histogram(
-            df,
-            x='MarketValue_M',
-            nbins=20,
-            title="Market Value Distribution",
-            labels={'MarketValue_M': 'Market Value (€M)'},
-            color_discrete_sequence=['lightblue']
-        )
-        st.plotly_chart(fig_hist1, use_container_width=True)
-
-    with col2:
-        fig_hist2 = px.histogram(
-            df,
-            x='PriceDiff_Pct',
-            nbins=30,
-            title="Price Difference % Distribution",
-            labels={'PriceDiff_Pct': 'Difference (%)'},
-            color_discrete_sequence=['orange']
-        )
-        st.plotly_chart(fig_hist2, use_container_width=True)
-
-    # Top bargains
-    st.markdown("---")
-    st.markdown("### 🔥 Top 10 Bargain Deals (Most Undervalued)")
-
-    df_bargains = df.nlargest(10, 'PriceDiff_Pct')[
-        ['Player', 'MarketValue_M', 'PredictedPrice_M', 'PriceDiff_M', 'PriceDiff_Pct']
-    ]
-
-    df_bargains.columns = ['Player', 'Market (€M)', 'Predicted (€M)', 'Diff (€M)', 'Upside (%)']
-
-    st.dataframe(
-        df_bargains.style.background_gradient(subset=['Upside (%)'], cmap='Greens'),
-        use_container_width=True
+    st.markdown("### 📊 MarketValue Distribution by Position")
+    fig_box = px.box(
+        df[df["MarketValue"] < 100],
+        x="Position", y="MarketValue",
+        color="Position",
+        title="Market Value Distribution by Position (€M, capped at €100M)",
+        height=450
     )
+    fig_box.update_layout(showlegend=False)
+    st.plotly_chart(fig_box, use_container_width=True)
 
-# ==================== MODE 3: PLAYER COMPARISON ====================
+    st.markdown("---")
+    st.markdown("### 🔥 Top 10 Most Undervalued Players")
+    df_bargains = df.nlargest(10, "PriceDiff_Pct")[
+        ["Player", "Position", "Club", "MarketValue", "PredictedValue", "PriceDiff_M", "PriceDiff_Pct"]
+    ].copy()
+    df_bargains.columns = ["Player", "Pos", "Club", "Market (€M)", "Predicted (€M)", "Diff (€M)", "Upside (%)"]
+    st.dataframe(df_bargains.reset_index(drop=True), use_container_width=True)
+
+# ──────────────────────────────────────────────
+# MODE 3: PLAYER COMPARISON
+# ──────────────────────────────────────────────
 elif analysis_mode == "🔍 Player Comparison":
-    st.subheader("🔍 Compare Players - Price & Performance")
+    st.subheader("🔍 Compare Players — Price & Performance")
 
-    # Select players
-    selected_players = st.multiselect(
-        "Select players to compare (max 5):",
-        df['Player'].tolist(),
-        default=df['Player'].head(3).tolist(),
-        max_selections=5
-    )
+    all_players = sorted(df["Player"].dropna().unique().tolist())
+    defaults = ["Kylian Mbappé", "Erling Haaland", "Vinicius Jr"] if "Kylian Mbappé" in all_players else all_players[:3]
+    selected = st.multiselect("Select players (max 5):", all_players, default=defaults, max_selections=5)
 
-    if selected_players:
-        df_selected = df[df['Player'].isin(selected_players)]
+    if selected:
+        df_sel = df[df["Player"].isin(selected)].copy()
 
-        # Comparison table
         st.markdown("### 📊 Price Comparison")
+        comp_cols = ["Player", "Position", "MarketValue", "PredictedValue", "PriceDiff_M", "PriceDiff_Pct", "ValueStatus"]
+        available_comp = [c for c in comp_cols if c in df_sel.columns]
+        st.dataframe(df_sel[available_comp].set_index("Player"), use_container_width=True)
 
-        comparison_cols = [
-            'Player', 'MarketValue_M', 'PredictedPrice_M',
-            'PriceDiff_M', 'PriceDiff_Pct', 'ValueStatus'
-        ]
-
-        df_comp = df_selected[comparison_cols].copy()
-        df_comp.columns = [
-            'Player', 'Market (€M)', 'Predicted (€M)',
-            'Diff (€M)', 'Diff (%)', 'Status'
-        ]
-
-        st.dataframe(df_comp, use_container_width=True)
-
-        # Radar chart comparison
+        # Radar chart
         st.markdown("---")
-        st.markdown("### 📈 Attribute Comparison")
-
-        attributes = ['Finishing', 'Positioning', 'Speed', 'Strength', 'Passing', 'Vision']
+        st.markdown("### 📈 Attribute Radar (FM 1–20 scale)")
+        radar_attrs = ["Finishing", "Speed", "Passing", "Vision", "Strength", "OffTheBall", "WorkRate"]
+        radar_attrs = [a for a in radar_attrs if a in df_sel.columns]
 
         fig_radar = go.Figure()
-
-        for player in selected_players:
-            player_data = df_selected[df_selected['Player'] == player]
-            values = player_data[attributes].values.flatten().tolist()
-            values += values[:1]  # close the loop
-
+        for player in selected:
+            row = df_sel[df_sel["Player"] == player]
+            if row.empty: continue
+            vals = row[radar_attrs].values.flatten().tolist()
             fig_radar.add_trace(go.Scatterpolar(
-                r=values,
-                theta=attributes + [attributes[0]],
-                fill='toself',
-                name=player
+                r=vals + [vals[0]],
+                theta=radar_attrs + [radar_attrs[0]],
+                fill="toself", name=player
             ))
-
         fig_radar.update_layout(
-            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-            showlegend=True,
-            title="Player Attributes Radar Chart",
-            height=500
+            polar=dict(radialaxis=dict(visible=True, range=[0, 20])),
+            showlegend=True, height=500,
+            title="FM Attribute Radar (1–20 scale)"
         )
-
         st.plotly_chart(fig_radar, use_container_width=True)
 
-        # Price bar chart
+        # Bar chart
         st.markdown("---")
-        st.markdown("### 💰 Price Comparison Chart")
-
+        st.markdown("### 💰 Market Value vs Predicted")
         fig_bar = go.Figure()
-
-        fig_bar.add_trace(go.Bar(
-            name='Market Value',
-            x=df_selected['Player'],
-            y=df_selected['MarketValue_M'],
-            marker_color='lightblue',
-            text=df_selected['MarketValue_M'],
-            texttemplate='€%{text:.1f}M',
-            textposition='outside'
-        ))
-
-        fig_bar.add_trace(go.Bar(
-            name='Predicted Price',
-            x=df_selected['Player'],
-            y=df_selected['PredictedPrice_M'],
-            marker_color='orange',
-            text=df_selected['PredictedPrice_M'],
-            texttemplate='€%{text:.1f}M',
-            textposition='outside'
-        ))
-
-        fig_bar.update_layout(
-            barmode='group',
-            height=400,
-            xaxis_title="Player",
-            yaxis_title="Price (€M)",
-            title="Market Value vs Predicted Price"
-        )
-
+        fig_bar.add_trace(go.Bar(name="Market Value", x=df_sel["Player"], y=df_sel["MarketValue"],
+                                  marker_color="#4C9BE8",
+                                  text=df_sel["MarketValue"].round(1),
+                                  texttemplate="€%{text}M", textposition="outside"))
+        fig_bar.add_trace(go.Bar(name="Predicted",    x=df_sel["Player"], y=df_sel["PredictedValue"],
+                                  marker_color="#F4A261",
+                                  text=df_sel["PredictedValue"].round(1),
+                                  texttemplate="€%{text}M", textposition="outside"))
+        fig_bar.update_layout(barmode="group", height=420,
+                               yaxis_title="€M", title="Market Value vs Ridge Prediction")
         st.plotly_chart(fig_bar, use_container_width=True)
-
     else:
-        st.info("👆 Please select at least one player to compare")
+        st.info("👆 Select at least one player above")
 
 # Footer
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #888;'>
-    <p>📊 TacticalFitAI - Advanced Analytics © 2025</p>
-    <p style='font-size: 0.9rem;'>Price data reference: Transfermarkt | ML Model: Random Forest</p>
-</div>
-""", unsafe_allow_html=True)
+st.caption("© 2025 TacticalFitAI • FM2023 Data • Ridge Regression Model")
