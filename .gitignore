@@ -1,2 +1,4 @@
-data/*
+data/FootballManager
+data/players_fm.csv
+data/role_profiles.json
 !data/.gitkeep
