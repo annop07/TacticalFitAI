@@ -296,13 +296,12 @@ def run_pipeline():
     print(f"   Market Value range: €{df_filtered['MarketValue'].min():.2f}M — €{df_filtered['MarketValue'].max():.2f}M")
     print(f"   Market Value mean:  €{df_filtered['MarketValue'].mean():.2f}M")
 
-    # ── Step 5: Rescale FM 1–20 → 0–100 ──────────────────────
-    print(f"\n📐 Step 5: Rescaling attributes 1–20 → 0–100 ...")
+    # ── Step 5: Keep FM 1–20 scale as-is ────────────────────
+    print(f"\n📐 Step 5: Keeping original FM 1–20 scale (no rescaling) ...")
     fm_cols = list(FM_ATTR_MAP.keys())
     for col in fm_cols:
         if col in df_filtered.columns:
-            df_filtered[col] = pd.to_numeric(df_filtered[col], errors="coerce").fillna(1)
-            df_filtered[col] = ((df_filtered[col] - 1) / 19 * 100).clip(0, 100).round(1)
+            df_filtered[col] = pd.to_numeric(df_filtered[col], errors="coerce").fillna(1).clip(1, 20).round(1)
 
     # ── Step 6: Select & Rename columns ──────────────────────
     print(f"\n🔤 Step 6: Selecting & renaming attributes ...")
@@ -365,13 +364,13 @@ def run_pipeline():
         print(f"\n   ⚠️ Not found: {not_found}")
         print("      (อาจอยู่นอก top leagues หรือชื่อสะกดต่าง)")
 
-    print(f"\n📊 ATTRIBUTE STATS (sample):")
+    print(f"\n📊 ATTRIBUTE STATS (sample) — scale 1–20:")
     sample_attrs = ["Finishing", "Speed", "Passing", "Vision", "Strength"]
     for attr in sample_attrs:
         if attr in df_out.columns:
             col = pd.to_numeric(df_out[attr], errors="coerce")
-            print(f"   {attr:<15s}: min={col.min():5.1f}  max={col.max():5.1f}  "
-                  f"mean={col.mean():5.1f}  std={col.std():.1f}")
+            print(f"   {attr:<15s}: min={col.min():4.1f}  max={col.max():4.1f}  "
+                  f"mean={col.mean():4.1f}  std={col.std():.1f}")
 
     return df_out
 

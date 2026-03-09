@@ -1,0 +1,301 @@
+{
+  "RandomForest_CV": {
+    "accuracy_mean": 0.6068,
+    "accuracy_std": 0.0063,
+    "f1_weighted": 0.5886,
+    "f1_macro": 0.3869,
+    "per_fold_accuracy": [
+      0.6054,
+      0.6113,
+      0.6153,
+      0.6054,
+      0.5967
+    ]
+  },
+  "XGBoost_CV": {
+    "accuracy_mean": 0.624,
+    "accuracy_std": 0.0049,
+    "f1_weighted": 0.6094,
+    "f1_macro": 0.4176,
+    "per_fold_accuracy": [
+      0.6282,
+      0.6307,
+      0.6235,
+      0.6205,
+      0.6173
+    ]
+  },
+  "FinalModel": {
+    "name": "XGBoost",
+    "test_accuracy": 0.6194,
+    "f1_weighted": 0.6036,
+    "f1_macro": 0.4053,
+    "classification_report": {
+      "Advanced Forward": {
+        "precision": 0.5428571428571428,
+        "recall": 0.5,
+        "f1-score": 0.5205479452054794,
+        "support": 114.0
+      },
+      "Advanced Playmaker": {
+        "precision": 0.46956521739130436,
+        "recall": 0.45,
+        "f1-score": 0.4595744680851064,
+        "support": 120.0
+      },
+      "Anchor": {
+        "precision": 0.4,
+        "recall": 0.16666666666666666,
+        "f1-score": 0.23529411764705882,
+        "support": 12.0
+      },
+      "Attacking Midfielder": {
+        "precision": 0.2727272727272727,
+        "recall": 0.06382978723404255,
+        "f1-score": 0.10344827586206896,
+        "support": 47.0
+      },
+      "Ball Playing Defender": {
+        "precision": 0.6355140186915887,
+        "recall": 0.7391304347826086,
+        "f1-score": 0.6834170854271356,
+        "support": 92.0
+      },
+      "Ball Winning Midfielder": {
+        "precision": 0.6157024793388429,
+        "recall": 0.6592920353982301,
+        "f1-score": 0.6367521367521367,
+        "support": 226.0
+      },
+      "Box To Box Midfielder": {
+        "precision": 0.4,
+        "recall": 0.2,
+        "f1-score": 0.26666666666666666,
+        "support": 30.0
+      },
+      "Carrilero": {
+        "precision": 0.5,
+        "recall": 0.2,
+        "f1-score": 0.2857142857142857,
+        "support": 15.0
+      },
+      "Central Defender": {
+        "precision": 0.7769652650822669,
+        "recall": 0.9042553191489362,
+        "f1-score": 0.8357915437561455,
+        "support": 470.0
+      },
+      "Central Midfielder": {
+        "precision": 0.6048951048951049,
+        "recall": 0.6383763837638377,
+        "f1-score": 0.6211849192100538,
+        "support": 271.0
+      },
+      "Complete Forward": {
+        "precision": 1.0,
+        "recall": 0.16666666666666666,
+        "f1-score": 0.2857142857142857,
+        "support": 6.0
+      },
+      "Complete Wing-Back": {
+        "precision": 0.25,
+        "recall": 0.0967741935483871,
+        "f1-score": 0.13953488372093023,
+        "support": 31.0
+      },
+      "Deep Lying Forward": {
+        "precision": 0.5833333333333334,
+        "recall": 0.3888888888888889,
+        "f1-score": 0.4666666666666667,
+        "support": 18.0
+      },
+      "Deep Lying Playmaker": {
+        "precision": 0.5833333333333334,
+        "recall": 0.48514851485148514,
+        "f1-score": 0.5297297297297298,
+        "support": 101.0
+      },
+      "Defensive Midfielder": {
+        "precision": 0.4,
+        "recall": 0.2,
+        "f1-score": 0.26666666666666666,
+        "support": 40.0
+      },
+      "Defensive Winger": {
+        "precision": 0.25,
+        "recall": 0.058823529411764705,
+        "f1-score": 0.09523809523809523,
+        "support": 17.0
+      },
+      "Enganche": {
+        "precision": 0.6666666666666666,
+        "recall": 0.14285714285714285,
+        "f1-score": 0.23529411764705882,
+        "support": 14.0
+      },
+      "Full-Back": {
+        "precision": 0.6284403669724771,
+        "recall": 0.6765432098765433,
+        "f1-score": 0.6516052318668252,
+        "support": 405.0
+      },
+      "Goalkeeper": {
+        "precision": 0.7232472324723247,
+        "recall": 0.7452471482889734,
+        "f1-score": 0.7340823970037453,
+        "support": 263.0
+      },
+      "Inside Forward": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 20.0
+      },
+      "Inverted Wing-Back": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 8.0
+      },
+      "Inverted Winger": {
+        "precision": 0.5334773218142549,
+        "recall": 0.5476718403547672,
+        "f1-score": 0.5404814004376368,
+        "support": 451.0
+      },
+      "Mezzala": {
+        "precision": 0.5033557046979866,
+        "recall": 0.45180722891566266,
+        "f1-score": 0.47619047619047616,
+        "support": 166.0
+      },
+      "No-Nonsense Centre-Back": {
+        "precision": 0.5675675675675675,
+        "recall": 0.4,
+        "f1-score": 0.4692737430167598,
+        "support": 105.0
+      },
+      "No-Nonsense Full-Back": {
+        "precision": 0.07692307692307693,
+        "recall": 0.02,
+        "f1-score": 0.031746031746031744,
+        "support": 50.0
+      },
+      "Poacher": {
+        "precision": 0.8408163265306122,
+        "recall": 0.8765957446808511,
+        "f1-score": 0.8583333333333333,
+        "support": 235.0
+      },
+      "Pressing Forward": {
+        "precision": 0.6333333333333333,
+        "recall": 0.6477272727272727,
+        "f1-score": 0.6404494382022472,
+        "support": 88.0
+      },
+      "Segundo Volante": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 11.0
+      },
+      "Shadow Striker": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 16.0
+      },
+      "Sweeper Keeper": {
+        "precision": 0.6905829596412556,
+        "recall": 0.6553191489361702,
+        "f1-score": 0.6724890829694323,
+        "support": 235.0
+      },
+      "Target Forward": {
+        "precision": 0.6712328767123288,
+        "recall": 0.6805555555555556,
+        "f1-score": 0.6758620689655173,
+        "support": 72.0
+      },
+      "Wide Centre-Back": {
+        "precision": 0.25,
+        "recall": 0.15384615384615385,
+        "f1-score": 0.19047619047619047,
+        "support": 13.0
+      },
+      "Wing-Back": {
+        "precision": 0.549800796812749,
+        "recall": 0.641860465116279,
+        "f1-score": 0.592274678111588,
+        "support": 215.0
+      },
+      "Winger": {
+        "precision": 0.5280289330922242,
+        "recall": 0.6445916114790287,
+        "f1-score": 0.5805168986083499,
+        "support": 453.0
+      },
+      "accuracy": 0.61941309255079,
+      "macro avg": {
+        "precision": 0.47495195090844256,
+        "recall": 0.38830808655870336,
+        "f1-score": 0.4053240253128736,
+        "support": 4430.0
+      },
+      "weighted avg": {
+        "precision": 0.5985872842645017,
+        "recall": 0.61941309255079,
+        "f1-score": 0.6036371248383002,
+        "support": 4430.0
+      }
+    },
+    "confusion_matrix_shape": [
+      34,
+      34
+    ]
+  },
+  "SHAP_importance": {
+    "OffTheBall": 0.455151,
+    "Dribbling": 0.432873,
+    "Aggression": 0.426058,
+    "Passing": 0.425355,
+    "Vision": 0.416707,
+    "Decisions": 0.406393,
+    "Finishing": 0.402421,
+    "Heading": 0.391772,
+    "Stamina": 0.383784,
+    "Technique": 0.382461,
+    "Composure": 0.377312,
+    "Marking": 0.367127,
+    "Strength": 0.362512,
+    "WorkRate": 0.360844,
+    "Positioning": 0.360022,
+    "Teamwork": 0.358235,
+    "Speed": 0.346797,
+    "Acceleration": 0.340363,
+    "Tackling": 0.334497,
+    "Anticipation": 0.321619
+  },
+  "RF_feature_importance": {
+    "Tackling": 0.104214,
+    "Marking": 0.093761,
+    "Dribbling": 0.092456,
+    "Finishing": 0.083183,
+    "Heading": 0.063812,
+    "Passing": 0.055556,
+    "Vision": 0.05452,
+    "Technique": 0.047231,
+    "WorkRate": 0.047109,
+    "Acceleration": 0.042152,
+    "Positioning": 0.040668,
+    "Teamwork": 0.035958,
+    "Strength": 0.034986,
+    "Composure": 0.033358,
+    "OffTheBall": 0.031613,
+    "Decisions": 0.029956,
+    "Stamina": 0.028091,
+    "Anticipation": 0.027646,
+    "Speed": 0.027468,
+    "Aggression": 0.026263
+  }
+}

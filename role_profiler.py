@@ -163,7 +163,7 @@ def build_role_profiles():
         for attr in ATTR_COLS:
             if attr in subset.columns:
                 val = subset[attr].dropna().mean()
-                centroid[attr] = round(float(val), 1) if not np.isnan(val) else 50.0
+                centroid[attr] = round(float(val), 1) if not np.isnan(val) else 10.0
 
         # Key attributes สำหรับ role นี้
         key_attrs = KEY_ATTRS_PER_ROLE.get(tai_role, list(centroid.keys())[:4])

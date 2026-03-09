@@ -1,0 +1,79 @@
+{
+  "RandomForest_CV": {
+    "mae_mean": 6.1771,
+    "mae_std": 0.2454,
+    "r2_mean": 0.0943,
+    "r2_std": 0.0225,
+    "per_fold_r2": [
+      0.0687,
+      0.065,
+      0.1117,
+      0.1095,
+      0.1164
+    ]
+  },
+  "XGBoost_CV": {
+    "mae_mean": 6.1853,
+    "mae_std": 0.2066,
+    "r2_mean": 0.0931,
+    "r2_std": 0.0407,
+    "per_fold_r2": [
+      0.0632,
+      0.0288,
+      0.1124,
+      0.1238,
+      0.1373
+    ]
+  },
+  "FinalModel": {
+    "name": "RandomForest",
+    "test_mae": 5.9878,
+    "test_r2": 0.0636
+  },
+  "SHAP_importance": {
+    "Anticipation": 1.162985,
+    "Composure": 1.010234,
+    "Acceleration": 0.906415,
+    "Speed": 0.796615,
+    "Age": 0.705223,
+    "Stamina": 0.701764,
+    "Passing": 0.620094,
+    "Dribbling": 0.548955,
+    "Decisions": 0.5257,
+    "Positioning": 0.518389,
+    "Teamwork": 0.505714,
+    "Vision": 0.486422,
+    "Strength": 0.454809,
+    "Technique": 0.446507,
+    "OffTheBall": 0.405936,
+    "Finishing": 0.293287,
+    "Tackling": 0.267022,
+    "WorkRate": 0.250061,
+    "Aggression": 0.248263,
+    "Heading": 0.235682,
+    "Marking": 0.201432
+  },
+  "RF_feature_importance": {
+    "Anticipation": 0.065305,
+    "Stamina": 0.063747,
+    "Speed": 0.06325,
+    "Acceleration": 0.061484,
+    "Decisions": 0.060572,
+    "Composure": 0.056171,
+    "Passing": 0.053766,
+    "Age": 0.050379,
+    "Dribbling": 0.04788,
+    "Aggression": 0.047857,
+    "Positioning": 0.044665,
+    "OffTheBall": 0.044262,
+    "Technique": 0.042926,
+    "Tackling": 0.042248,
+    "Heading": 0.04116,
+    "Strength": 0.040287,
+    "Finishing": 0.04018,
+    "Vision": 0.040121,
+    "Teamwork": 0.033739,
+    "Marking": 0.033226,
+    "WorkRate": 0.026775
+  }
+}

@@ -61,8 +61,8 @@ ATTR_COLS = [
 # Ensure all attribute columns exist and are numeric
 for col in ATTR_COLS:
     if col not in df.columns:
-        df[col] = 50.0
-    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(50.0).clip(0, 100)
+        df[col] = 10.0
+    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(10.0).clip(1, 20)
 
 # Ensure meta columns
 if "MarketValue" not in df.columns:
@@ -168,17 +168,17 @@ def generate_explanation(row, system: str, weights: dict, top_n: int = 3):
     explanations = []
     for attr, contrib in top_attrs:
         value = all_attrs[attr]
-        if value >= 90:
+        if value >= 18:
             level = "Exceptional"
-        elif value >= 80:
+        elif value >= 16:
             level = "Excellent"
-        elif value >= 70:
+        elif value >= 14:
             level = "Very Good"
-        elif value >= 60:
+        elif value >= 12:
             level = "Good"
         else:
             level = "Adequate"
-        explanations.append(f"{attr}: {level} ({int(value)})")
+        explanations.append(f"{attr}: {level} ({int(value)}/20)")
 
     return " • ".join(explanations)
 
@@ -225,14 +225,14 @@ def get_role_profile(role: str):
         p = ROLE_PROFILES[role]
         ideal_dict = p["ideal"]
         # Build numpy array matching ATTR_COLS order
-        ideal_vec = np.array([[ideal_dict.get(a, 50.0) for a in ATTR_COLS]])
+        ideal_vec = np.array([[ideal_dict.get(a, 10.0) for a in ATTR_COLS]])
         return {
             "description": f"{role} — {p.get('dominant_position','?')} (n={p.get('n_players',0):,})",
             "ideal": ideal_vec,
             "key_attrs": p.get("key_attrs", ATTR_COLS[:4])
         }
-    # Fallback: average of all players
-    fallback = np.array([[50.0] * len(ATTR_COLS)])
+    # Fallback: average of all players (scale 1-20, midpoint = 10)
+    fallback = np.array([[10.0] * len(ATTR_COLS)])
     return {"description": f"{role} (fallback)", "ideal": fallback, "key_attrs": ATTR_COLS[:4]}
 
 def compute_scores(df_src: pd.DataFrame, system: str, role: str, weights: dict, use_minmax: bool, alpha: float):
@@ -251,7 +251,7 @@ def compute_scores(df_src: pd.DataFrame, system: str, role: str, weights: dict, 
     else:
         mults = np.ones((1, len(ATTR_COLS)))
 
-    ideal = np.clip(ideal * mults, 0, 100)
+    ideal = np.clip(ideal * mults, 1, 20)
 
     # Build player attribute matrix
     df_attrs = df_calc[ATTR_COLS].copy()
@@ -261,7 +261,7 @@ def compute_scores(df_src: pd.DataFrame, system: str, role: str, weights: dict, 
         for c in ATTR_COLS:
             mn, mx = df_attrs[c].min(), df_attrs[c].max()
             if mx > mn:
-                df_attrs[c] = (df_attrs[c] - mn) / (mx - mn) * 100
+                df_attrs[c] = (df_attrs[c] - mn) / (mx - mn) * 20
 
     # Weighted FitScore — use weights for matching attrs, default 0 for others
     df_calc["FitScore"] = sum(
@@ -534,7 +534,7 @@ with tab3:
             polar=dict(
                 radialaxis=dict(
                     visible=True,
-                    range=[0, 100],
+                    range=[0, 20],
                     tickfont=dict(size=10)
                 )
             ),
@@ -650,7 +650,7 @@ with tab4:
                     ))
 
                     fig_mini.update_layout(
-                        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 20])),
                         showlegend=True,
                         height=300
                     )
