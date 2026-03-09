@@ -121,26 +121,26 @@ role_options = {
 player_role = st.sidebar.selectbox("Player Role", role_options[position], index=0)
 
 st.sidebar.subheader("⚙️ Attribute Weights")
-w_fin = st.sidebar.slider("Finishing",      0.0, 1.0, 0.20, 0.01)
-w_pos = st.sidebar.slider("Positioning",    0.0, 1.0, 0.15, 0.01)
-w_spd = st.sidebar.slider("Speed",          0.0, 1.0, 0.10, 0.01)
-w_str = st.sidebar.slider("Strength",       0.0, 1.0, 0.08, 0.01)
-w_pas = st.sidebar.slider("Passing",        0.0, 1.0, 0.12, 0.01)
-w_vis = st.sidebar.slider("Vision",         0.0, 1.0, 0.10, 0.01)
-w_agg = st.sidebar.slider("Aggression",     0.0, 1.0, 0.05, 0.01)
-w_com = st.sidebar.slider("Composure",      0.0, 1.0, 0.07, 0.01)
-w_otb = st.sidebar.slider("OffTheBall",     0.0, 1.0, 0.08, 0.01)
-w_wor = st.sidebar.slider("WorkRate",       0.0, 1.0, 0.05, 0.01)
-w_tck = st.sidebar.slider("Tackling",       0.0, 1.0, 0.05, 0.01)
-w_mar = st.sidebar.slider("Marking",        0.0, 1.0, 0.05, 0.01)
-w_hea = st.sidebar.slider("Heading",        0.0, 1.0, 0.03, 0.01)
-w_dri = st.sidebar.slider("Dribbling",      0.0, 1.0, 0.03, 0.01)
-w_tec = st.sidebar.slider("Technique",      0.0, 1.0, 0.03, 0.01)
-w_acc = st.sidebar.slider("Acceleration",   0.0, 1.0, 0.05, 0.01)
-w_sta = st.sidebar.slider("Stamina",        0.0, 1.0, 0.04, 0.01)
-w_ant = st.sidebar.slider("Anticipation",   0.0, 1.0, 0.05, 0.01)
-w_dec = st.sidebar.slider("Decisions",      0.0, 1.0, 0.04, 0.01)
-w_tea = st.sidebar.slider("Teamwork",       0.0, 1.0, 0.03, 0.01)
+w_fin = st.sidebar.slider("Finishing",      0.0, 3.0, 1.0, 0.1)
+w_pos = st.sidebar.slider("Positioning",    0.0, 3.0, 1.0, 0.1)
+w_spd = st.sidebar.slider("Speed",          0.0, 3.0, 1.0, 0.1)
+w_str = st.sidebar.slider("Strength",       0.0, 3.0, 1.0, 0.1)
+w_pas = st.sidebar.slider("Passing",        0.0, 3.0, 1.0, 0.1)
+w_vis = st.sidebar.slider("Vision",         0.0, 3.0, 1.0, 0.1)
+w_agg = st.sidebar.slider("Aggression",     0.0, 3.0, 1.0, 0.1)
+w_com = st.sidebar.slider("Composure",      0.0, 3.0, 1.0, 0.1)
+w_otb = st.sidebar.slider("OffTheBall",     0.0, 3.0, 1.0, 0.1)
+w_wor = st.sidebar.slider("WorkRate",       0.0, 3.0, 1.0, 0.1)
+w_tck = st.sidebar.slider("Tackling",       0.0, 3.0, 1.0, 0.1)
+w_mar = st.sidebar.slider("Marking",        0.0, 3.0, 1.0, 0.1)
+w_hea = st.sidebar.slider("Heading",        0.0, 3.0, 1.0, 0.1)
+w_dri = st.sidebar.slider("Dribbling",      0.0, 3.0, 1.0, 0.1)
+w_tec = st.sidebar.slider("Technique",      0.0, 3.0, 1.0, 0.1)
+w_acc = st.sidebar.slider("Acceleration",   0.0, 3.0, 1.0, 0.1)
+w_sta = st.sidebar.slider("Stamina",        0.0, 3.0, 1.0, 0.1)
+w_ant = st.sidebar.slider("Anticipation",   0.0, 3.0, 1.0, 0.1)
+w_dec = st.sidebar.slider("Decisions",      0.0, 3.0, 1.0, 0.1)
+w_tea = st.sidebar.slider("Teamwork",       0.0, 3.0, 1.0, 0.1)
 
 normalize_weights = st.sidebar.checkbox("Normalize weights to sum=1", value=True, help="If on, weights will be proportionally normalized.")
 use_minmax = st.sidebar.checkbox("Normalize attributes (Min-Max) before scoring", value=True, help="Makes different scales comparable.")
@@ -173,15 +173,18 @@ age_range = st.sidebar.slider(
     step=1
 )
 
-# Min Market Value filter (€M)
-mv_min = st.sidebar.number_input(
-    "Min Market Value (€M)",
+# Market Value filter (€M)
+mv_max_limit = float(df["MarketValue"].max()) if "MarketValue" in df.columns else 200.0
+mv_range = st.sidebar.slider(
+    "Market Value Range (€M)",
     min_value=0.0,
-    max_value=50.0,
-    value=0.0,
+    max_value=mv_max_limit,
+    value=(0.0, mv_max_limit),
     step=0.5,
-    help="กรอง: เฉพาะนักเตะที่ Market Value ≥ ค่านี้"
+    help="ตั้งงบ: เฉพาะนักเตะที่ Market Value อยู่ในช่วงนี้"
 )
+mv_min = mv_range[0]
+mv_max = mv_range[1]
 
 # ---------------------------- Weight Handling ----------------------------
 weights = {
@@ -225,7 +228,10 @@ if "Age" in df_filtered.columns:
         (df_filtered["Age"] <= age_range[1])
     ]
 
-df_filtered = df_filtered[df_filtered["MarketValue"] >= mv_min]
+df_filtered = df_filtered[
+    (df_filtered["MarketValue"] >= mv_min) &
+    (df_filtered["MarketValue"] <= mv_max)
+]
 
 # Filter by position
 df_pos = df_filtered[df_filtered["Position"] == position].copy()
