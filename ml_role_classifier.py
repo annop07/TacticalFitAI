@@ -23,6 +23,7 @@ import json
 import os
 import warnings
 from typing import Tuple
+from scipy import stats
 warnings.filterwarnings("ignore")
 
 from sklearn.ensemble import RandomForestClassifier
@@ -254,6 +255,58 @@ def compute_shap_importance(model, X: np.ndarray,
 
 
 # ─────────────────────────────────────────
+# STATISTICAL SIGNIFICANCE TEST
+# ─────────────────────────────────────────
+
+def paired_ttest(cv_a: dict, cv_b: dict,
+                 name_a: str = "RandomForest",
+                 name_b: str = "XGBoost",
+                 metric: str = "accuracy") -> dict:
+    """
+    Paired t-test เปรียบเทียบผลลัพธ์ 5-fold CV ระหว่าง 2 โมเดล
+    H0: ไม่มีความแตกต่างอย่างมีนัยสำคัญ (mean difference = 0)
+    H1: มีความแตกต่างอย่างมีนัยสำคัญ (two-tailed, α=0.05)
+
+    Returns dict ที่มี t-statistic, p-value, conclusion สำหรับบันทึกใน report
+    """
+    key = f"per_fold_{metric}"
+    scores_a = np.array(cv_a[key])
+    scores_b = np.array(cv_b[key])
+
+    t_stat, p_value = stats.ttest_rel(scores_a, scores_b)
+    significant = p_value < 0.05
+    better = name_b if scores_b.mean() > scores_a.mean() else name_a
+
+    print(f"\n📊 Paired t-test ({name_a} vs {name_b}) — metric: {metric}")
+    print(f"   {name_a} folds: {scores_a.tolist()}")
+    print(f"   {name_b} folds: {scores_b.tolist()}")
+    print(f"   t-statistic:   {t_stat:.4f}")
+    print(f"   p-value:       {p_value:.4f}")
+    if significant:
+        print(f"   ✅ Significant (p<0.05): {better} is significantly better")
+    else:
+        print(f"   ❌ Not significant (p={p_value:.4f} ≥ 0.05): no significant difference")
+
+    return {
+        "test":        "paired_ttest",
+        "metric":      metric,
+        "model_a":     name_a,
+        "model_b":     name_b,
+        "mean_a":      round(float(scores_a.mean()), 4),
+        "mean_b":      round(float(scores_b.mean()), 4),
+        "t_statistic": round(float(t_stat), 4),
+        "p_value":     round(float(p_value), 4),
+        "significant_at_0.05": bool(significant),
+        "better_model": better,
+        "conclusion": (
+            f"{better} significantly outperforms (p={p_value:.4f} < 0.05)"
+            if significant else
+            f"No significant difference between {name_a} and {name_b} (p={p_value:.4f} ≥ 0.05)"
+        )
+    }
+
+
+# ─────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────
 
@@ -302,6 +355,13 @@ def main():
         )
         xgb_cv = run_cross_validation(xgb, X, y, "XGBoost")
         results["XGBoost_CV"] = xgb_cv
+
+        # ── Paired t-test (RF vs XGBoost) ─────────────────────
+        ttest_result = paired_ttest(rf_cv, xgb_cv,
+                                    name_a="RandomForest",
+                                    name_b="XGBoost",
+                                    metric="accuracy")
+        results["StatisticalTest"] = ttest_result
 
         # เลือก best model จาก CV accuracy
         if xgb_cv["accuracy_mean"] > rf_cv["accuracy_mean"]:

@@ -1,6 +1,10 @@
 """
 TacticalFitAI - Price Prediction (FM2023 Edition)
-ระบบทำนายราคาตลาดของนักเตะด้วย Machine Learning (Ridge Regression + FM attributes)
+ระบบทำนายราคาตลาดของนักเตะด้วย Machine Learning
+
+Model: โหลดจาก models/price_predictor.pkl
+       (RandomForest/XGBoost + StandardScaler + log1p target)
+       เทรนโดย price_prediction_model.py
 """
 
 import streamlit as st
@@ -8,10 +12,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import mean_absolute_error, r2_score
+import joblib
+from pathlib import Path
 
 # ──────────────────────────────────────────────
 # Page Config
@@ -48,8 +50,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**📈 Model Info**")
     st.info(
-        "**Ridge Regression** (L2 regularised)\n\n"
-        "Features: 15 FM attributes (1–20 scale)\n\n"
+        "**RandomForest / XGBoost** (เทรนโดย price_prediction_model.py)\n\n"
+        "Target: log1p(MarketValue) — แก้ right-skew\n\n"
+        "Features: 21 FM attributes + Age (1–20 scale)\n\n"
         "Dataset: FM2023 — 22K+ players"
     )
     st.markdown("---")
@@ -58,58 +61,61 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # FM Attribute columns used as features
 # ──────────────────────────────────────────────
-FEATURE_COLS = [
-    "Finishing", "Positioning", "Speed", "Strength", "Passing", "Vision",
-    "Aggression", "Composure", "OffTheBall", "WorkRate", "Tackling",
-    "Marking", "Heading", "Dribbling", "Technique"
-]
+# Paths
+# ──────────────────────────────────────────────
+MODEL_PKL = "models/price_predictor.pkl"
+DATA_CSV  = "data/players_fm.csv"
 
 # ──────────────────────────────────────────────
-# Load data + Train model (cached)
+# Load model + data (cached)
 # ──────────────────────────────────────────────
+@st.cache_resource
+def load_model():
+    """โหลด price_predictor.pkl ที่เทรนโดย price_prediction_model.py"""
+    if not Path(MODEL_PKL).exists():
+        return None
+    data = joblib.load(MODEL_PKL)
+    return data  # {"model", "scaler", "feature_cols", "model_name", "target"}
+
 @st.cache_data(ttl=300)
 def load_and_predict():
-    """Load FM dataset and train Ridge regression to predict MarketValue."""
-    paths = ["data/players_fm.csv", "players_fm.csv"]
-    df = None
-    for p in paths:
+    """โหลด FM dataset + ทำนายราคาด้วย pre-trained model จาก pkl"""
+    # Load CSV
+    for p in [DATA_CSV, "players_fm.csv"]:
         try:
             df = pd.read_csv(p, encoding="utf-8")
             break
         except FileNotFoundError:
             continue
-    if df is None:
-        return None, None, None, None
+    else:
+        return None, None, None, None, None
+
+    # Load model artifacts
+    model_data = load_model()
+    if model_data is None:
+        return None, None, None, None, None
+
+    model       = model_data["model"]
+    scaler      = model_data["scaler"]
+    FEATURE_COLS = model_data["feature_cols"]
+    model_name  = model_data.get("model_name", "ML Model")
 
     # Ensure feature columns exist and are numeric
     for col in FEATURE_COLS:
         if col not in df.columns:
-            df[col] = 10.0
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(10.0).clip(1, 20)
+            df[col] = 10.0 if col != "Age" else 25.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(
+            10.0 if col != "Age" else 25.0
+        ).clip(1 if col != "Age" else 15, 20 if col != "Age" else 45)
 
     # MarketValue in €M
     if "MarketValue" not in df.columns:
         df["MarketValue"] = 5.0
     df["MarketValue"] = pd.to_numeric(df["MarketValue"], errors="coerce").fillna(0.5).clip(lower=0.05)
 
-    # Drop rows without valid MarketValue
-    df_model = df[df["MarketValue"] > 0.09].copy()
-
-    # Train Ridge regression (log target for better fit)
-    X = df_model[FEATURE_COLS].values
-    y = np.log1p(df_model["MarketValue"].values)  # log-scale for right-skewed distribution
-
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    model = Ridge(alpha=1.0)
-    model.fit(X_scaled, y)
-
-    # CV score
-    cv_scores = cross_val_score(model, X_scaled, y, cv=5, scoring="r2")
-
-    # Predict on full dataset
-    X_all_scaled = scaler.transform(df[FEATURE_COLS].values)
+    # Predict on full dataset (model predicts log1p, back-transform with expm1)
+    X_all = df[FEATURE_COLS].values
+    X_all_scaled = scaler.transform(X_all)
     df["PredictedValue"] = np.expm1(model.predict(X_all_scaled)).round(2)
     df["PredictedValue"] = df["PredictedValue"].clip(lower=0.1)
 
@@ -117,33 +123,48 @@ def load_and_predict():
     df["PriceDiff_Pct"] = ((df["PriceDiff_M"] / df["MarketValue"]) * 100).round(1)
 
     def value_status(pct):
-        if pct > 25:   return "🔥 Undervalued"
+        if pct > 25:    return "🔥 Undervalued"
         elif pct < -25: return "⚠️ Overvalued"
         else:           return "✅ Fair Value"
 
     df["ValueStatus"] = df["PriceDiff_Pct"].apply(value_status)
 
-    # Model report
-    y_pred_train = np.expm1(model.predict(X_scaled))
-    y_true_train = df_model["MarketValue"].values
-    report = {
-        "cv_r2_mean": float(cv_scores.mean()),
-        "cv_r2_std":  float(cv_scores.std()),
-        "mae":        float(mean_absolute_error(y_true_train, y_pred_train)),
-        "r2":         float(r2_score(y_true_train, y_pred_train)),
-        "coefs":      dict(zip(FEATURE_COLS, model.coef_.tolist()))
-    }
+    # Report (no re-training — load from report json if available)
+    report = {"model_name": model_name, "note": "See models/price_predictor_report.json for full CV metrics"}
+    try:
+        import json
+        with open("models/price_predictor_report.json", encoding="utf-8") as f:
+            rpt = json.load(f)
+        fm  = rpt.get("FinalModel", {})
+        # Pick the winning model's CV block (XGBoost preferred, fallback RF)
+        cv_block = rpt.get("XGBoost_CV") or rpt.get("RandomForest_CV") or {}
+        report.update({
+            "cv_r2_mean": cv_block.get("r2_mean", 0.0),
+            "cv_r2_std":  cv_block.get("r2_std",  0.0),
+            "mae":        fm.get("test_mae_eur", 0.0),
+            "r2":         fm.get("test_r2_log",  0.0),
+            # SHAP / RF importance — keep original JSON keys
+            "shap_importance": rpt.get("SHAP_importance"),
+            "rf_importance":   rpt.get("RF_feature_importance"),
+        })
+    except Exception:
+        pass
 
-    return df, model, scaler, report
+    return df, model, scaler, report, FEATURE_COLS
 
 # ──────────────────────────────────────────────
 # Load
 # ──────────────────────────────────────────────
-df, model, scaler, report = load_and_predict()
+df, model, scaler, report, FEATURE_COLS = load_and_predict()
 
 if df is None:
-    st.error("⚠️ ไม่พบ `data/players_fm.csv` — กรุณารัน `fm_data_pipeline.py` ก่อน")
+    if not Path(MODEL_PKL).exists():
+        st.error("⚠️ ไม่พบ `models/price_predictor.pkl` — กรุณารัน `python3 price_prediction_model.py` ก่อน")
+    else:
+        st.error("⚠️ ไม่พบ `data/players_fm.csv` — กรุณารัน `fm_data_pipeline.py` ก่อน")
     st.stop()
+
+# FEATURE_COLS ได้จาก load_and_predict() แล้ว (ไม่ต้องเรียก load_model() ซ้ำ)
 
 # ──────────────────────────────────────────────
 # MODE 1: PRICE PREDICTION
@@ -211,17 +232,21 @@ if analysis_mode == "💸 Price Prediction":
                       yaxis_title="€M", title="Market Value vs ML Prediction")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Feature importance
+    # Feature importance — shap_importance / rf_importance already loaded in report dict
     st.markdown("---")
-    st.subheader("🔬 Feature Importance (Ridge Coefficients)")
-    coef_df = pd.DataFrame({"Attribute": list(report["coefs"].keys()),
-                             "Coefficient": list(report["coefs"].values())})
-    coef_df = coef_df.sort_values("Coefficient", ascending=False)
-    fig_coef = px.bar(coef_df, x="Coefficient", y="Attribute", orientation="h",
-                      color="Coefficient", color_continuous_scale="RdBu",
-                      title="Attribute Importance for Price Prediction")
-    fig_coef.update_layout(yaxis=dict(autorange="reversed"), height=450)
-    st.plotly_chart(fig_coef, use_container_width=True)
+    st.subheader("🔬 Feature Importance (SHAP / RF Importance)")
+    shap_data = report.get("shap_importance") or report.get("rf_importance")
+    if shap_data:
+        coef_df = pd.DataFrame({"Attribute": list(shap_data.keys()),
+                                 "Importance": list(shap_data.values())})
+        coef_df = coef_df.sort_values("Importance", ascending=False)
+        fig_coef = px.bar(coef_df, x="Importance", y="Attribute", orientation="h",
+                          color="Importance", color_continuous_scale="Blues",
+                          title="Attribute Importance for Price Prediction (SHAP)")
+        fig_coef.update_layout(yaxis=dict(autorange="reversed"), height=450)
+        st.plotly_chart(fig_coef, use_container_width=True)
+    else:
+        st.info("ไม่พบข้อมูล feature importance — รัน price_prediction_model.py ใหม่เพื่อสร้าง report")
 
 # ──────────────────────────────────────────────
 # MODE 2: MARKET ANALYSIS
@@ -326,11 +351,11 @@ elif analysis_mode == "🔍 Player Comparison":
                                   text=df_sel["PredictedValue"].round(1),
                                   texttemplate="€%{text}M", textposition="outside"))
         fig_bar.update_layout(barmode="group", height=420,
-                               yaxis_title="€M", title="Market Value vs Ridge Prediction")
+                               yaxis_title="€M", title="Market Value vs ML Prediction")
         st.plotly_chart(fig_bar, use_container_width=True)
     else:
         st.info("👆 Select at least one player above")
 
 # Footer
 st.markdown("---")
-st.caption("© 2025 TacticalFitAI • FM2023 Data • Ridge Regression Model")
+st.caption("© 2025 TacticalFitAI • FM2023 Data • XGBoost / RandomForest Model")

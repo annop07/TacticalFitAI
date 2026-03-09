@@ -25,6 +25,19 @@
       0.6173
     ]
   },
+  "StatisticalTest": {
+    "test": "paired_ttest",
+    "metric": "accuracy",
+    "model_a": "RandomForest",
+    "model_b": "XGBoost",
+    "mean_a": 0.6068,
+    "mean_b": 0.624,
+    "t_statistic": -6.6734,
+    "p_value": 0.0026,
+    "significant_at_0.05": true,
+    "better_model": "XGBoost",
+    "conclusion": "XGBoost significantly outperforms (p=0.0026 < 0.05)"
+  },
   "FinalModel": {
     "name": "XGBoost",
     "test_accuracy": 0.6194,

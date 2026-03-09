@@ -14,5 +14,8 @@ joblib>=1.2.0
 # ── Web App ────────────────────────────────────
 streamlit>=1.30.0
 
+# ── Scientific Computing ───────────────────────
+scipy>=1.10.0
+
 # ── Visualisation ──────────────────────────────
 plotly>=5.15.0

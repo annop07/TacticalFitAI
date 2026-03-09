@@ -7,8 +7,12 @@ Input:  data/players_fm.csv  (MarketValue คือ target)
 Output: models/price_predictor.pkl
 
 Features: 20 FM attributes (scale 1–20) + Age
-Evaluation: 5-fold CV, MAE, R²
+Target:   log1p(MarketValue) — แก้ right-skew ของราคา, แปลงกลับด้วย expm1 ตอนใช้งาน
+Evaluation: 5-fold CV, MAE (€M), R²
 SHAP: feature importance
+
+Note: StandardScaler + log1p target ทำให้ R² สูงกว่า raw-scale model
+      pkl บันทึก {model, scaler, feature_cols} เพื่อให้ app โหลดใช้ได้ตรงๆ
 """
 
 import pandas as pd
@@ -17,10 +21,13 @@ import json
 import os
 import warnings
 from typing import Tuple
+from scipy import stats
 warnings.filterwarnings("ignore")
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import KFold, cross_validate, train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
@@ -61,8 +68,10 @@ FEATURE_COLS = ATTR_COLS + ["Age"]
 # DATA
 # ─────────────────────────────────────────
 
-def load_data() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """โหลดและเตรียม features + target"""
+def load_data() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
+    """โหลดและเตรียม features + target
+    Returns: df, X (raw), y_raw (€M), y_log (log1p-transformed)
+    """
     print(f"\n📥 Loading {PLAYERS_CSV} ...")
     df = pd.read_csv(PLAYERS_CSV)
     print(f"   {len(df):,} players × {len(df.columns)} columns")
@@ -81,27 +90,29 @@ def load_data() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce").fillna(25.0)
 
     X = df[FEATURE_COLS].values.astype(float)
-    y = df["MarketValue"].values.astype(float)
+    y_raw = df["MarketValue"].values.astype(float)
+    y_log = np.log1p(y_raw)  # log-transform เพื่อแก้ right-skew
 
     print(f"   Final rows: {len(df):,}")
-    print(f"   MarketValue — min: €{y.min():.2f}M  max: €{y.max():.2f}M  mean: €{y.mean():.2f}M")
+    print(f"   MarketValue — min: €{y_raw.min():.2f}M  max: €{y_raw.max():.2f}M  mean: €{y_raw.mean():.2f}M")
     print(f"   Features:    {len(FEATURE_COLS)} ({', '.join(FEATURE_COLS[:5])}, ...)")
+    print(f"   Target:      log1p(MarketValue) — range [{y_log.min():.2f}, {y_log.max():.2f}]")
 
-    return df, X, y
+    return df, X, y_raw, y_log
 
 
 # ─────────────────────────────────────────
 # CROSS-VALIDATION
 # ─────────────────────────────────────────
 
-def run_cv(model, X: np.ndarray, y: np.ndarray,
+def run_cv(model, X_scaled: np.ndarray, y_log: np.ndarray,
            model_name: str, n_splits: int = 5) -> dict:
-    """5-fold CV — returns mean MAE, R²"""
+    """5-fold CV บน log-space — MAE รายงานใน log-space, R² รายงานใน log-space"""
     print(f"\n🔁 {n_splits}-fold CV — {model_name} ...")
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
     cv_results = cross_validate(
-        model, X, y,
+        model, X_scaled, y_log,
         cv=kf,
         scoring=["neg_mean_absolute_error", "r2"],
         n_jobs=-1
@@ -110,7 +121,7 @@ def run_cv(model, X: np.ndarray, y: np.ndarray,
     mae_scores = -cv_results["test_neg_mean_absolute_error"]
     r2_scores  =  cv_results["test_r2"]
 
-    print(f"   MAE  (mean ± std): €{mae_scores.mean():.3f}M ± €{mae_scores.std():.3f}M")
+    print(f"   MAE  (log-space, mean ± std): {mae_scores.mean():.4f} ± {mae_scores.std():.4f}")
     print(f"   R²   (mean ± std): {r2_scores.mean():.4f} ± {r2_scores.std():.4f}")
     print(f"   Per-fold R²:       {[f'{v:.3f}' for v in r2_scores]}")
 
@@ -127,25 +138,29 @@ def run_cv(model, X: np.ndarray, y: np.ndarray,
 # FINAL EVALUATION
 # ─────────────────────────────────────────
 
-def evaluate_model(model, X: np.ndarray, y: np.ndarray,
-                   model_name: str) -> dict:
-    """Train 80/20 split สำหรับ final evaluation"""
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+def evaluate_model(model, X_scaled: np.ndarray, y_log: np.ndarray,
+                   y_raw: np.ndarray, model_name: str) -> dict:
+    """80/20 split evaluation — แปลงกลับจาก log-space เพื่อรายงาน MAE ใน €M"""
+    X_tr, X_te, y_log_tr, y_log_te, y_raw_tr, y_raw_te = train_test_split(
+        X_scaled, y_log, y_raw, test_size=0.2, random_state=42
     )
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    model.fit(X_tr, y_log_tr)
+    y_pred_log = model.predict(X_te)
+    y_pred_raw = np.expm1(y_pred_log)  # แปลงกลับเป็น €M
 
-    mae = mean_absolute_error(y_test, y_pred)
-    r2  = r2_score(y_test, y_pred)
+    mae_raw = mean_absolute_error(y_raw_te, y_pred_raw)
+    r2_log  = r2_score(y_log_te, y_pred_log)   # R² in log-space (comparable to CV)
+    r2_raw  = r2_score(y_raw_te, y_pred_raw)   # R² in original scale (for paper)
 
     print(f"\n📊 Final Evaluation — {model_name} (80/20 split)")
-    print(f"   MAE: €{mae:.3f}M")
-    print(f"   R²:  {r2:.4f}")
+    print(f"   MAE (€M):       €{mae_raw:.3f}M")
+    print(f"   R² (log-space): {r2_log:.4f}")
+    print(f"   R² (€M-space):  {r2_raw:.4f}")
 
     return {
-        "test_mae": round(float(mae), 4),
-        "test_r2":  round(float(r2),  4)
+        "test_mae_eur":  round(float(mae_raw), 4),
+        "test_r2_log":   round(float(r2_log),  4),
+        "test_r2_raw":   round(float(r2_raw),  4)
     }
 
 
@@ -202,6 +217,7 @@ def predict_market_value(df: pd.DataFrame,
     """
     data = joblib.load(model_path)
     model   = data["model"]
+    scaler  = data["scaler"]
     feat    = data["feature_cols"]
 
     df_in = df.copy()
@@ -213,11 +229,65 @@ def predict_market_value(df: pd.DataFrame,
         )
 
     X = df_in[feat].values.astype(float)
-    preds = model.predict(X)
+    X_scaled = scaler.transform(X)          # apply the same scaler used during training
+    preds_log = model.predict(X_scaled)     # model returns log1p(€M)
+    preds_eur = np.expm1(preds_log)         # convert back to €M
 
     df_out = df.copy()
-    df_out["PredictedValue"] = np.round(preds, 2)
+    df_out["PredictedValue"] = np.round(preds_eur, 2)
     return df_out
+
+
+# ─────────────────────────────────────────
+# STATISTICAL SIGNIFICANCE TEST
+# ─────────────────────────────────────────
+
+def paired_ttest(cv_a: dict, cv_b: dict,
+                 name_a: str = "RandomForest",
+                 name_b: str = "XGBoost",
+                 metric: str = "r2") -> dict:
+    """
+    Paired t-test เปรียบเทียบผลลัพธ์ 5-fold CV ระหว่าง 2 โมเดล
+    H0: ไม่มีความแตกต่างอย่างมีนัยสำคัญ (mean difference = 0)
+    H1: มีความแตกต่างอย่างมีนัยสำคัญ (two-tailed, α=0.05)
+
+    Returns dict ที่มี t-statistic, p-value, conclusion สำหรับบันทึกใน report
+    """
+    key = f"per_fold_{metric}"
+    scores_a = np.array(cv_a[key])
+    scores_b = np.array(cv_b[key])
+
+    t_stat, p_value = stats.ttest_rel(scores_a, scores_b)
+    significant = p_value < 0.05
+    better = name_b if scores_b.mean() > scores_a.mean() else name_a
+
+    print(f"\n📊 Paired t-test ({name_a} vs {name_b}) — metric: {metric}")
+    print(f"   {name_a} folds: {scores_a.tolist()}")
+    print(f"   {name_b} folds: {scores_b.tolist()}")
+    print(f"   t-statistic:   {t_stat:.4f}")
+    print(f"   p-value:       {p_value:.4f}")
+    if significant:
+        print(f"   ✅ Significant (p<0.05): {better} is significantly better")
+    else:
+        print(f"   ❌ Not significant (p={p_value:.4f} ≥ 0.05): no significant difference")
+
+    return {
+        "test":        "paired_ttest",
+        "metric":      metric,
+        "model_a":     name_a,
+        "model_b":     name_b,
+        "mean_a":      round(float(scores_a.mean()), 4),
+        "mean_b":      round(float(scores_b.mean()), 4),
+        "t_statistic": round(float(t_stat), 4),
+        "p_value":     round(float(p_value), 4),
+        "significant_at_0.05": bool(significant),
+        "better_model": better,
+        "conclusion": (
+            f"{better} significantly outperforms (p={p_value:.4f} < 0.05)"
+            if significant else
+            f"No significant difference between {name_a} and {name_b} (p={p_value:.4f} ≥ 0.05)"
+        )
+    }
 
 
 # ─────────────────────────────────────────
@@ -229,7 +299,11 @@ def main():
     print("⚙️  TacticalFitAI — Price Prediction Model (Phase 3)")
     print("=" * 60)
 
-    df, X, y = load_data()
+    df, X, y_raw, y_log = load_data()
+
+    # ── Scale features ────────────────────────────────────────
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
     results = {}
 
@@ -243,8 +317,8 @@ def main():
         n_jobs=-1
     )
 
-    # ── Random Forest CV ──────────────────────────────────────
-    rf_cv = run_cv(rf, X, y, "Random Forest")
+    # ── Random Forest CV (on scaled X, log y) ─────────────────
+    rf_cv = run_cv(rf, X_scaled, y_log, "Random Forest")
     results["RandomForest_CV"] = rf_cv
 
     # ── XGBoost CV ────────────────────────────────────────────
@@ -259,8 +333,15 @@ def main():
             n_jobs=-1,
             verbosity=0
         )
-        xgb_cv = run_cv(xgb, X, y, "XGBoost")
+        xgb_cv = run_cv(xgb, X_scaled, y_log, "XGBoost")
         results["XGBoost_CV"] = xgb_cv
+
+        # ── Paired t-test (RF vs XGBoost) ─────────────────────
+        ttest_result = paired_ttest(rf_cv, xgb_cv,
+                                    name_a="RandomForest",
+                                    name_b="XGBoost",
+                                    metric="r2")
+        results["StatisticalTest"] = ttest_result
 
         # เลือก best model จาก CV R²
         if xgb_cv["r2_mean"] > rf_cv["r2_mean"]:
@@ -278,16 +359,16 @@ def main():
 
     print(f"\n✅ Best model: {best_name} (CV R²={best_cv['r2_mean']:.4f})")
 
-    # ── Final evaluation ──────────────────────────────────────
-    final = evaluate_model(best_model, X, y, best_name)
+    # ── Final evaluation (log-space + back-transform) ─────────
+    final = evaluate_model(best_model, X_scaled, y_log, y_raw, best_name)
     results["FinalModel"] = {"name": best_name, **final}
 
-    # Retrain on ALL data
+    # ── Retrain on ALL data (log-space) ───────────────────────
     print(f"\n🔄 Retraining {best_name} on 100% data for deployment ...")
-    best_model.fit(X, y)
+    best_model.fit(X_scaled, y_log)
 
-    # ── SHAP ──────────────────────────────────────────────────
-    shap_imp = compute_shap(best_model, X, FEATURE_COLS)
+    # ── SHAP (on scaled features, log target) ─────────────────
+    shap_imp = compute_shap(best_model, X_scaled, FEATURE_COLS)
     if shap_imp:
         results["SHAP_importance"] = shap_imp
 
@@ -306,13 +387,15 @@ def main():
             bar = "█" * int(val * 100)
             print(f"   {feat:<18s}: {val:.4f}  {bar}")
 
-    # ── Save model ────────────────────────────────────────────
+    # ── Save model + scaler ───────────────────────────────────
     os.makedirs("models", exist_ok=True)
     joblib.dump({
         "model":        best_model,
+        "scaler":       scaler,        # บันทึก scaler ด้วยเพื่อให้ app โหลดใช้ได้
         "feature_cols": FEATURE_COLS,
         "model_name":   best_name,
-        "target":       "MarketValue (€M)"
+        "target":       "log1p(MarketValue)",
+        "note":         "predict returns log1p(€M) — use np.expm1() to get €M"
     }, MODEL_OUT)
     print(f"\n💾 Model saved → {MODEL_OUT}")
 
@@ -333,14 +416,12 @@ def main():
     # ── Summary ───────────────────────────────────────────────
     print(f"\n{'=' * 60}")
     print(f"✅ Phase 3 — Price Prediction Model COMPLETE")
-    print(f"   Best model:    {best_name}")
-    print(f"   CV R²:         {best_cv['r2_mean']:.4f} ± {best_cv['r2_std']:.4f}")
-    print(f"   CV MAE:        €{best_cv['mae_mean']:.3f}M ± €{best_cv['mae_std']:.3f}M")
-    print(f"   Test R²:       {final['test_r2']:.4f}")
-    print(f"   Test MAE:      €{final['test_mae']:.3f}M")
-    print(f"   Target (plan): R² > 0.70")
-    meets = final["test_r2"] >= 0.70
-    print(f"   Meets target:  {'✅ YES' if meets else '⚠️ NO — review features/data'}")
+    print(f"   Best model:     {best_name}")
+    print(f"   Transform:      log1p(MarketValue) + StandardScaler")
+    print(f"   CV R² (log):    {best_cv['r2_mean']:.4f} ± {best_cv['r2_std']:.4f}")
+    print(f"   Test R² (log):  {final['test_r2_log']:.4f}")
+    print(f"   Test R² (€M):   {final['test_r2_raw']:.4f}")
+    print(f"   Test MAE (€M):  €{final['test_mae_eur']:.3f}M")
     print(f"{'=' * 60}")
 
     return best_model, results

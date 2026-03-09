@@ -72,11 +72,12 @@ CLASSIFIER_REPORT = load_role_classifier_report()
 if df is None:
     st.stop()
 
-# FM attributes used throughout the app
+# FM attributes used throughout the app (must match ml_role_classifier.py / price_prediction_model.py)
 ATTR_COLS = [
     "Finishing", "Positioning", "Speed", "Strength", "Passing", "Vision",
     "Aggression", "Composure", "OffTheBall", "WorkRate", "Tackling",
-    "Marking", "Heading", "Dribbling", "Technique"
+    "Marking", "Heading", "Dribbling", "Technique",
+    "Acceleration", "Stamina", "Anticipation", "Decisions", "Teamwork"
 ]
 
 # Ensure all attribute columns exist and are numeric
@@ -120,21 +121,26 @@ role_options = {
 player_role = st.sidebar.selectbox("Player Role", role_options[position], index=0)
 
 st.sidebar.subheader("⚙️ Attribute Weights")
-w_fin = st.sidebar.slider("Finishing",    0.0, 1.0, 0.20, 0.01)
-w_pos = st.sidebar.slider("Positioning",  0.0, 1.0, 0.15, 0.01)
-w_spd = st.sidebar.slider("Speed",        0.0, 1.0, 0.10, 0.01)
-w_str = st.sidebar.slider("Strength",     0.0, 1.0, 0.08, 0.01)
-w_pas = st.sidebar.slider("Passing",      0.0, 1.0, 0.12, 0.01)
-w_vis = st.sidebar.slider("Vision",       0.0, 1.0, 0.10, 0.01)
-w_agg = st.sidebar.slider("Aggression",   0.0, 1.0, 0.05, 0.01)
-w_com = st.sidebar.slider("Composure",    0.0, 1.0, 0.07, 0.01)
-w_otb = st.sidebar.slider("OffTheBall",   0.0, 1.0, 0.08, 0.01)
-w_wor = st.sidebar.slider("WorkRate",     0.0, 1.0, 0.05, 0.01)
-w_tck = st.sidebar.slider("Tackling",     0.0, 1.0, 0.05, 0.01)
-w_mar = st.sidebar.slider("Marking",      0.0, 1.0, 0.05, 0.01)
-w_hea = st.sidebar.slider("Heading",      0.0, 1.0, 0.03, 0.01)
-w_dri = st.sidebar.slider("Dribbling",    0.0, 1.0, 0.03, 0.01)
-w_tec = st.sidebar.slider("Technique",    0.0, 1.0, 0.03, 0.01)
+w_fin = st.sidebar.slider("Finishing",      0.0, 1.0, 0.20, 0.01)
+w_pos = st.sidebar.slider("Positioning",    0.0, 1.0, 0.15, 0.01)
+w_spd = st.sidebar.slider("Speed",          0.0, 1.0, 0.10, 0.01)
+w_str = st.sidebar.slider("Strength",       0.0, 1.0, 0.08, 0.01)
+w_pas = st.sidebar.slider("Passing",        0.0, 1.0, 0.12, 0.01)
+w_vis = st.sidebar.slider("Vision",         0.0, 1.0, 0.10, 0.01)
+w_agg = st.sidebar.slider("Aggression",     0.0, 1.0, 0.05, 0.01)
+w_com = st.sidebar.slider("Composure",      0.0, 1.0, 0.07, 0.01)
+w_otb = st.sidebar.slider("OffTheBall",     0.0, 1.0, 0.08, 0.01)
+w_wor = st.sidebar.slider("WorkRate",       0.0, 1.0, 0.05, 0.01)
+w_tck = st.sidebar.slider("Tackling",       0.0, 1.0, 0.05, 0.01)
+w_mar = st.sidebar.slider("Marking",        0.0, 1.0, 0.05, 0.01)
+w_hea = st.sidebar.slider("Heading",        0.0, 1.0, 0.03, 0.01)
+w_dri = st.sidebar.slider("Dribbling",      0.0, 1.0, 0.03, 0.01)
+w_tec = st.sidebar.slider("Technique",      0.0, 1.0, 0.03, 0.01)
+w_acc = st.sidebar.slider("Acceleration",   0.0, 1.0, 0.05, 0.01)
+w_sta = st.sidebar.slider("Stamina",        0.0, 1.0, 0.04, 0.01)
+w_ant = st.sidebar.slider("Anticipation",   0.0, 1.0, 0.05, 0.01)
+w_dec = st.sidebar.slider("Decisions",      0.0, 1.0, 0.04, 0.01)
+w_tea = st.sidebar.slider("Teamwork",       0.0, 1.0, 0.03, 0.01)
 
 normalize_weights = st.sidebar.checkbox("Normalize weights to sum=1", value=True, help="If on, weights will be proportionally normalized.")
 use_minmax = st.sidebar.checkbox("Normalize attributes (Min-Max) before scoring", value=True, help="Makes different scales comparable.")
@@ -179,21 +185,26 @@ mv_min = st.sidebar.number_input(
 
 # ---------------------------- Weight Handling ----------------------------
 weights = {
-    "Finishing":   w_fin,
-    "Positioning": w_pos,
-    "Speed":       w_spd,
-    "Strength":    w_str,
-    "Passing":     w_pas,
-    "Vision":      w_vis,
-    "Aggression":  w_agg,
-    "Composure":   w_com,
-    "OffTheBall":  w_otb,
-    "WorkRate":    w_wor,
-    "Tackling":    w_tck,
-    "Marking":     w_mar,
-    "Heading":     w_hea,
-    "Dribbling":   w_dri,
-    "Technique":   w_tec,
+    "Finishing":    w_fin,
+    "Positioning":  w_pos,
+    "Speed":        w_spd,
+    "Strength":     w_str,
+    "Passing":      w_pas,
+    "Vision":       w_vis,
+    "Aggression":   w_agg,
+    "Composure":    w_com,
+    "OffTheBall":   w_otb,
+    "WorkRate":     w_wor,
+    "Tackling":     w_tck,
+    "Marking":      w_mar,
+    "Heading":      w_hea,
+    "Dribbling":    w_dri,
+    "Technique":    w_tec,
+    "Acceleration": w_acc,
+    "Stamina":      w_sta,
+    "Anticipation": w_ant,
+    "Decisions":    w_dec,
+    "Teamwork":     w_tea,
 }
 
 # Normalize weights if needed
@@ -270,11 +281,15 @@ def generate_explanation(row, system: str, weights: dict, top_n: int = 3):
 # ---------------------------- ML: Player Similarity ----------------------------
 @st.cache_data
 def compute_similarity_matrix(df_src: pd.DataFrame):
-    """Compute player similarity matrix using FM attributes"""
+    """Compute player similarity matrix using FM attributes.
+    Always uses positional indexing (row 0, 1, 2, ...) to be safe
+    regardless of the DataFrame's original pandas index.
+    """
     feature_cols = ATTR_COLS  # use the global FM attribute list
-    available = [c for c in feature_cols if c in df_src.columns]
+    df_reset = df_src.reset_index(drop=True)
+    available = [c for c in feature_cols if c in df_reset.columns]
 
-    X = df_src[available].values
+    X = df_reset[available].values
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     similarity_matrix = cosine_similarity(X_scaled)
@@ -283,19 +298,21 @@ def compute_similarity_matrix(df_src: pd.DataFrame):
 
 def find_similar_players(df_src: pd.DataFrame, player_name: str, similarity_matrix, top_n=5, min_score=0.75):
     """Find similar players using ML"""
-    try:
-        player_idx = df_src[df_src['Player'] == player_name].index[0]
-    except IndexError:
+    # Use positional index (iloc-style) to match the similarity matrix rows
+    df_reset = df_src.reset_index(drop=True)
+    matches = df_reset[df_reset['Player'] == player_name]
+    if matches.empty:
         return None
+    player_pos = matches.index[0]  # positional index in reset df
 
-    scores = similarity_matrix[player_idx]
+    scores = similarity_matrix[player_pos]
 
     results = pd.DataFrame({
-        'Player': df_src['Player'],
-        'Position': df_src['Position'],
+        'Player': df_reset['Player'],
+        'Position': df_reset['Position'],
         'Similarity': scores * 100,
-        'MarketValue': df_src['MarketValue'],
-        'OverallScore': df_src.get('OverallScore', 0)
+        'MarketValue': df_reset['MarketValue'],
+        'OverallScore': df_reset.get('OverallScore', pd.Series(0, index=df_reset.index))
     })
 
     results = results[results['Player'] != player_name]
@@ -328,11 +345,12 @@ def compute_scores(df_src: pd.DataFrame, system: str, role: str, weights: dict, 
     ideal = role_profile["ideal"].astype(float)  # shape (1, len(ATTR_COLS))
 
     # Tactical system adjustment — small multipliers per formation
-    # Order matches ATTR_COLS: Fin, Pos, Spd, Str, Pas, Vis, Agg, Cmp, OTB, Wor, Tck, Mar, Hea, Dri, Tec
+    # Order matches ATTR_COLS (20 attrs):
+    # Fin, Pos, Spd, Str, Pas, Vis, Agg, Cmp, OTB, Wor, Tck, Mar, Hea, Dri, Tec, Acc, Sta, Ant, Dec, Tea
     if system == "3-4-2-1":
-        mults = np.array([[1.0, 1.05, 1.0, 1.0, 0.98, 1.0, 1.02, 1.0, 1.03, 1.02, 1.0, 1.0, 1.0, 1.0, 1.0]])
+        mults = np.array([[1.0, 1.05, 1.0, 1.0, 0.98, 1.0, 1.02, 1.0, 1.03, 1.02, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.03, 1.02, 1.0, 1.02]])
     elif system == "4-3-3":
-        mults = np.array([[1.0, 1.03, 1.05, 0.98, 1.0, 1.0, 1.0, 1.0, 1.02, 1.0, 1.0, 1.0, 1.0, 1.02, 1.0]])
+        mults = np.array([[1.0, 1.03, 1.05, 0.98, 1.0, 1.0, 1.0, 1.0, 1.02, 1.0, 1.0, 1.0, 1.0, 1.02, 1.0, 1.05, 1.02, 1.0, 1.0, 1.0]])
     else:
         mults = np.ones((1, len(ATTR_COLS)))
 
@@ -396,7 +414,8 @@ if show_balloons:
     st.balloons()
 
 # ---------------------------- Compute ML Similarity Matrix ----------------------------
-similarity_matrix = compute_similarity_matrix(df_filtered)
+# Compute on full df (not df_filtered) so indices match df in tab4
+similarity_matrix = compute_similarity_matrix(df)
 
 # ---------------------------- Tabs Layout ----------------------------
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏆 Ranking", "📊 Head-to-Head", "📈 Radar Chart", "🤖 Player Similarity (ML)", "⚙️ Settings & Export", "🎓 Role Classifier (ML)"])
@@ -480,9 +499,8 @@ with tab2:
     if len(chosen) >= 2:
         comparison_df = ranked[ranked["Player"].isin(chosen)].copy()
 
-        # Core attributes for comparison (FM attributes)
-        all_attrs = ["Finishing", "Positioning", "Speed", "Strength", "Passing",
-                     "Vision", "Aggression", "Composure", "OffTheBall", "WorkRate", "Tackling", "Technique"]
+        # Core attributes for comparison (FM attributes) — use the same 20 cols as scoring
+        all_attrs = ATTR_COLS
 
         # Display scores first
         st.markdown("### 🎯 Overall Scores")
@@ -650,7 +668,7 @@ with tab4:
     st.subheader("🤖 Player Similarity Finder (Machine Learning)")
     st.markdown("Find players with similar playing styles using **Machine Learning algorithms**")
 
-    st.info("💡 **How it works**: Uses StandardScaler + Cosine Similarity on 15 FM attributes (Finishing, Positioning, Speed, Strength, Passing, Vision, Aggression, Composure, OffTheBall, WorkRate, Tackling, Marking, Heading, Dribbling, Technique)")
+    st.info("💡 **How it works**: Uses StandardScaler + Cosine Similarity on 20 FM attributes (Finishing, Positioning, Speed, Strength, Passing, Vision, Aggression, Composure, OffTheBall, WorkRate, Tackling, Marking, Heading, Dribbling, Technique, Acceleration, Stamina, Anticipation, Decisions, Teamwork)")
 
     # Player selection
     all_players = sorted(df['Player'].tolist())
